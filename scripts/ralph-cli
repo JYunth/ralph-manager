@@ -1,0 +1,507 @@
+#!/usr/bin/env python3
+"""
+ralph-cli — Minimal CLI for managing ralph.json
+
+Designed to minimize token usage for LLM agents managing the kanban.
+Instead of reading/rewriting the full JSON, agents run short commands.
+
+Env: RALPH_JSON — path to ralph.json (required)
+"""
+
+import argparse
+import json
+import os
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def get_path():
+    p = os.environ.get("RALPH_JSON")
+    if not p:
+        print("error: RALPH_JSON env var not set", file=sys.stderr)
+        sys.exit(1)
+    return Path(p)
+
+
+def load():
+    path = get_path()
+    if not path.exists():
+        print(f"error: {path} not found", file=sys.stderr)
+        sys.exit(1)
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def save(data):
+    path = get_path()
+    # Atomic write: temp file + rename to avoid corruption
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        os.unlink(tmp)
+        raise
+
+
+def now_iso():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def find_in(lst, task_id):
+    for i, t in enumerate(lst):
+        if t.get("id") == task_id:
+            return i, t
+    return None, None
+
+
+def completed_ids(data):
+    return set(t["id"] for t in data.get("completed", []))
+
+
+# ── Commands ──
+
+
+def cmd_init(args):
+    """Bootstrap a new ralph.json with project metadata and empty kanban."""
+    path = get_path()
+    if path.exists() and not args.force:
+        print(f"error: {path} already exists. Use --force to overwrite.", file=sys.stderr)
+        sys.exit(1)
+
+    data = {
+        "project": args.project,
+        "repo": str(Path(args.repo).resolve()),
+        "status": "initialized",
+        "branch": "",
+        "base_branch": args.base_branch,
+        "iterations": {"planned": args.iterations, "actual": 0},
+        "current": None,
+        "completed": [],
+        "backlog": [],
+        "discovered": [],
+        "notes": [],
+    }
+
+    # Write directly (not using save() since file may not exist yet)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+    print(f"initialized: {path}")
+    print(f"  project: {args.project}")
+    print(f"  repo: {data['repo']}")
+    print(f"  iterations: {args.iterations}")
+    print(f"  Add tasks with: ralph task add --id 0 --title '...'")
+
+
+def cmd_show(args):
+    """Compact project summary."""
+    d = load()
+    total = (len(d.get("completed", [])) + len(d.get("backlog", []))
+             + len(d.get("discovered", [])) + (1 if d.get("current") else 0))
+    done = len(d.get("completed", []))
+    it = d.get("iterations", {})
+
+    print(f'{d.get("project", "?")} | {d.get("status", "?").upper()} '
+          f'| iter {it.get("actual", 0)}/{it.get("planned", 0)} '
+          f'| {done}/{total} tasks done')
+
+    cur = d.get("current")
+    if cur and cur.get("task"):
+        r = cur.get("retries", 0)
+        retry_str = f" [retry {r}]" if r > 0 else ""
+        print(f'  current: #{cur["id"]} {cur["task"]}{retry_str}')
+    else:
+        print("  current: none")
+
+    done_ids = completed_ids(d)
+    backlog = d.get("backlog", [])
+    if backlog:
+        parts = []
+        for t in backlog:
+            dep = t.get("depends_on", [])
+            blocked = any(did not in done_ids for did in dep)
+            parts.append(f'#{t["id"]}{"(blocked)" if blocked else ""}')
+        print(f"  backlog: {' '.join(parts)}")
+
+    disc = d.get("discovered", [])
+    if disc:
+        disc_ids = " ".join(f"#{t['id']}" for t in disc)
+        print(f"  discovered: {disc_ids}")
+
+
+def cmd_status(args):
+    """Get or set project status."""
+    d = load()
+    if args.value:
+        valid = ["initialized", "running", "paused", "completed"]
+        if args.value not in valid:
+            print(f"error: status must be one of {valid}", file=sys.stderr)
+            sys.exit(1)
+        d["status"] = args.value
+        save(d)
+        print(f"status: {args.value}")
+    else:
+        print(d.get("status", "unknown"))
+
+
+def cmd_task_start(args):
+    """Move a backlog task to current."""
+    d = load()
+
+    # Check no current task
+    cur = d.get("current")
+    if cur and cur.get("task"):
+        print(f"error: task #{cur['id']} is already current. complete it first.", file=sys.stderr)
+        sys.exit(1)
+
+    # Find in backlog
+    idx, task = find_in(d.get("backlog", []), args.id)
+    if task is None:
+        print(f"error: task #{args.id} not found in backlog", file=sys.stderr)
+        sys.exit(1)
+
+    # Check depends_on
+    done_ids = completed_ids(d)
+    deps = task.get("depends_on", [])
+    unmet = [did for did in deps if did not in done_ids]
+    if unmet:
+        print(f"error: task #{args.id} blocked by: {', '.join(f'#{x}' for x in unmet)}", file=sys.stderr)
+        sys.exit(1)
+
+    # Move to current
+    d["backlog"].pop(idx)
+    task["status"] = "in_progress"
+    task["started_at"] = now_iso()
+    task["retries"] = 0
+    # Remove depends_on from current (no longer relevant)
+    task.pop("depends_on", None)
+    d["current"] = task
+
+    save(d)
+    print(f"started: #{task['id']} {task['task']}")
+
+
+def cmd_task_complete(args):
+    """Move current task to completed."""
+    d = load()
+
+    cur = d.get("current")
+    if not cur or not cur.get("task"):
+        print("error: no current task", file=sys.stderr)
+        sys.exit(1)
+
+    # Build completed entry
+    entry = {
+        "id": cur["id"],
+        "task": cur["task"],
+        "description": cur.get("description", ""),
+        "completed_at": now_iso(),
+    }
+    if cur.get("retries", 0) > 0:
+        entry["retries"] = cur["retries"]
+    if args.test:
+        entry["test_results"] = args.test
+    if args.files:
+        entry["files_changed"] = [f.strip() for f in args.files.split(",")]
+
+    d.setdefault("completed", []).append(entry)
+    d["current"] = None
+
+    # Optionally start next task
+    if args.next is not None:
+        idx, task = find_in(d.get("backlog", []), args.next)
+        if task is None:
+            print(f"warning: --next #{args.next} not found in backlog, current is now empty", file=sys.stderr)
+        else:
+            done_ids = completed_ids(d)
+            deps = task.get("depends_on", [])
+            unmet = [did for did in deps if did not in done_ids]
+            if unmet:
+                print(f"warning: --next #{args.next} blocked by {', '.join(f'#{x}' for x in unmet)}, current is now empty", file=sys.stderr)
+            else:
+                d["backlog"].pop(idx)
+                task["status"] = "in_progress"
+                task["started_at"] = now_iso()
+                task["retries"] = 0
+                task.pop("depends_on", None)
+                d["current"] = task
+                print(f"started: #{task['id']} {task['task']}")
+
+    save(d)
+    print(f"completed: #{entry['id']} {entry['task']}")
+
+
+def cmd_task_retry(args):
+    """Increment retries on current task."""
+    d = load()
+
+    cur = d.get("current")
+    if not cur or not cur.get("task"):
+        print("error: no current task", file=sys.stderr)
+        sys.exit(1)
+
+    cur["retries"] = cur.get("retries", 0) + 1
+    save(d)
+    print(f"retry: #{cur['id']} now at {cur['retries']}")
+
+
+def cmd_task_add(args):
+    """Add a task to backlog. Reads description from stdin."""
+    d = load()
+
+    # Check ID doesn't conflict
+    all_ids = set()
+    for t in d.get("completed", []):
+        all_ids.add(t["id"])
+    if d.get("current") and d["current"].get("id") is not None:
+        all_ids.add(d["current"]["id"])
+    for t in d.get("backlog", []):
+        all_ids.add(t["id"])
+    for t in d.get("discovered", []):
+        all_ids.add(t["id"])
+
+    if args.id in all_ids:
+        print(f"error: task #{args.id} already exists", file=sys.stderr)
+        sys.exit(1)
+
+    # Read description from stdin
+    if sys.stdin.isatty():
+        desc = args.title  # fallback: use title as description if no stdin
+    else:
+        desc = sys.stdin.read().strip()
+        if not desc:
+            desc = args.title
+
+    task = {
+        "id": args.id,
+        "task": args.title,
+        "description": desc,
+    }
+    if args.skills:
+        task["skills"] = [s.strip() for s in args.skills.split(",")]
+    if args.acceptance:
+        task["acceptance"] = [a.strip() for a in args.acceptance.split("|")]
+    if args.depends_on:
+        task["depends_on"] = [int(x.strip()) for x in args.depends_on.split(",")]
+
+    d.setdefault("backlog", []).append(task)
+    save(d)
+    print(f"added: #{task['id']} {task['task']}")
+
+
+def cmd_task_promote(args):
+    """Move a discovered task to backlog."""
+    d = load()
+
+    idx, task = find_in(d.get("discovered", []), args.id)
+    if task is None:
+        print(f"error: task #{args.id} not found in discovered", file=sys.stderr)
+        sys.exit(1)
+
+    d["discovered"].pop(idx)
+    # Clean up discovered-specific fields
+    task.pop("source", None)
+    d.setdefault("backlog", []).append(task)
+
+    save(d)
+    print(f"promoted: #{task['id']} {task['task']} → backlog")
+
+
+def cmd_task_ls(args):
+    """List tasks grouped by column."""
+    d = load()
+
+    cur = d.get("current")
+    if cur and cur.get("task"):
+        r = cur.get("retries", 0)
+        retry_str = f" [retry {r}]" if r > 0 else ""
+        print(f"  current  #{cur['id']}  {cur['task']}{retry_str}")
+
+    done_ids = completed_ids(d)
+    for t in d.get("backlog", []):
+        dep = t.get("depends_on", [])
+        blocked = any(did not in done_ids for did in dep)
+        flag = " [blocked]" if blocked else ""
+        print(f"  backlog  #{t['id']}  {t['task']}{flag}")
+
+    for t in d.get("discovered", []):
+        print(f"  discovered  #{t['id']}  {t['task']}")
+
+    for t in reversed(d.get("completed", [])):
+        r = t.get("retries", 0)
+        retry_str = f" [retry {r}]" if r > 0 else ""
+        test = t.get("test_results", "")
+        test_str = f" [{test}]" if test else ""
+        print(f"  done  #{t['id']}  {t['task']}{test_str}{retry_str}")
+
+
+def cmd_commit(args):
+    """Attach commit hash to the most recent completed task."""
+    d = load()
+
+    completed = d.get("completed", [])
+    if not completed:
+        print("error: no completed tasks", file=sys.stderr)
+        sys.exit(1)
+
+    completed[-1]["commit"] = args.hash
+    save(d)
+    print(f"commit: #{completed[-1]['id']} ← {args.hash}")
+
+
+def cmd_iter(args):
+    """Increment iterations.actual."""
+    d = load()
+    d.setdefault("iterations", {"planned": 0, "actual": 0})
+    d["iterations"]["actual"] = d["iterations"].get("actual", 0) + 1
+    save(d)
+    print(f"iterations: {d['iterations']['actual']}/{d['iterations']['planned']}")
+
+
+def cmd_discover(args):
+    """Add a discovered task. Reads description from stdin."""
+    d = load()
+
+    if sys.stdin.isatty():
+        desc = args.title
+    else:
+        desc = sys.stdin.read().strip()
+        if not desc:
+            desc = args.title
+
+    task = {
+        "id": args.id,
+        "task": args.title,
+        "description": desc,
+    }
+    if args.source:
+        task["source"] = args.source
+
+    d.setdefault("discovered", []).append(task)
+    save(d)
+    print(f"discovered: #{task['id']} {task['task']}")
+
+
+def cmd_note(args):
+    """Append a note."""
+    d = load()
+    d.setdefault("notes", []).append(args.text)
+    save(d)
+    print(f"note: added ({len(d['notes'])} total)")
+
+
+# ── Parser ──
+
+
+def main():
+    p = argparse.ArgumentParser(prog="ralph", description="Manage ralph.json")
+    sub = p.add_subparsers(dest="command")
+
+    # init
+    si = sub.add_parser("init", help="Bootstrap new ralph.json")
+    si.add_argument("--project", required=True, help="Project name")
+    si.add_argument("--repo", required=True, help="Absolute path to repository")
+    si.add_argument("--iterations", type=int, default=10, help="Planned iterations (default: 10)")
+    si.add_argument("--base-branch", default="main", help="Base branch (default: main)")
+    si.add_argument("--force", action="store_true", help="Overwrite existing ralph.json")
+
+    # show
+    sub.add_parser("show", help="Project summary")
+
+    # status
+    sp = sub.add_parser("status", help="Get/set project status")
+    sp.add_argument("value", nargs="?", help="initialized|running|paused|completed")
+
+    # task
+    tp = sub.add_parser("task", help="Task operations")
+    tsub = tp.add_subparsers(dest="task_command")
+
+    # task ls
+    tsub.add_parser("ls", help="List all tasks")
+
+    # task start ID
+    ts = tsub.add_parser("start", help="Move backlog task to current")
+    ts.add_argument("id", type=int, help="Task ID")
+
+    # task complete
+    tc = tsub.add_parser("complete", help="Complete current task")
+    tc.add_argument("--test", choices=["pass", "fail"], help="Test results")
+    tc.add_argument("--files", help="Comma-separated changed files")
+    tc.add_argument("--next", type=int, help="Also start this backlog task ID")
+
+    # task retry
+    tsub.add_parser("retry", help="Increment retries on current task")
+
+    # task add
+    ta = tsub.add_parser("add", help="Add task to backlog (pipe description via stdin)")
+    ta.add_argument("--id", type=int, required=True, help="Task ID")
+    ta.add_argument("--title", required=True, help="Short task title")
+    ta.add_argument("--skills", help="Comma-separated skills")
+    ta.add_argument("--acceptance", help="Pipe-separated acceptance criteria")
+    ta.add_argument("--depends-on", help="Comma-separated task IDs")
+
+    # task promote
+    tpr = tsub.add_parser("promote", help="Move discovered task to backlog")
+    tpr.add_argument("id", type=int, help="Task ID")
+
+    # commit
+    sc = sub.add_parser("commit", help="Attach commit hash to last completed task")
+    sc.add_argument("hash", help="Git commit hash")
+
+    # iter
+    sub.add_parser("iter", help="Increment iterations.actual")
+
+    # discover
+    sd = sub.add_parser("discover", help="Add discovered task (pipe description via stdin)")
+    sd.add_argument("--id", type=int, required=True, help="Task ID")
+    sd.add_argument("--title", required=True, help="Short task title")
+    sd.add_argument("--source", help="Which task discovered this")
+
+    # note
+    sn = sub.add_parser("note", help="Append a note")
+    sn.add_argument("text", help="Note text")
+
+    args = p.parse_args()
+
+    if args.command == "init":
+        cmd_init(args)
+    elif args.command == "show":
+        cmd_show(args)
+    elif args.command == "status":
+        cmd_status(args)
+    elif args.command == "task":
+        if args.task_command == "ls":
+            cmd_task_ls(args)
+        elif args.task_command == "start":
+            cmd_task_start(args)
+        elif args.task_command == "complete":
+            cmd_task_complete(args)
+        elif args.task_command == "retry":
+            cmd_task_retry(args)
+        elif args.task_command == "add":
+            cmd_task_add(args)
+        elif args.task_command == "promote":
+            cmd_task_promote(args)
+        else:
+            tp.print_help()
+    elif args.command == "commit":
+        cmd_commit(args)
+    elif args.command == "iter":
+        cmd_iter(args)
+    elif args.command == "discover":
+        cmd_discover(args)
+    elif args.command == "note":
+        cmd_note(args)
+    else:
+        p.print_help()
+
+
+if __name__ == "__main__":
+    main()

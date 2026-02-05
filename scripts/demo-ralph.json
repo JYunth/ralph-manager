@@ -1,0 +1,129 @@
+{
+  "project": "ORION-7",
+  "repo": "/home/jyunth/projects/orion-7",
+  "status": "running",
+  "branch": "ralph/orion-nav-system",
+  "base_branch": "main",
+  "iterations": { "planned": 12, "actual": 5 },
+  "current": {
+    "id": 4,
+    "task": "Implement telemetry stream parser",
+    "description": "Build the real-time telemetry ingestion pipeline.\n\nWhat to build:\n- WebSocket server at ws://localhost:8080/telemetry\n- Parse incoming binary telemetry frames (header + payload)\n- Frame format: [sync_byte(1)][msg_id(2)][length(2)][payload(N)][crc(2)]\n- Decode attitude quaternions, GPS coordinates, power levels\n\nImplementation:\n- Use ws library for WebSocket server\n- Create TelemetryDecoder class in lib/telemetry/decoder.ts\n- Ring buffer for last 1000 frames\n- Emit parsed events via EventEmitter pattern\n\nEdge cases:\n- Handle partial frames across WebSocket messages\n- CRC validation with retry on failure\n- Graceful degradation on malformed packets",
+    "status": "in_progress",
+    "started_at": "2026-02-06T14:30:00Z",
+    "retries": 1,
+    "skills": ["typescript", "websockets", "binary-protocols"],
+    "acceptance": [
+      "WebSocket server accepts connections on port 8080",
+      "Binary frames decoded correctly with CRC validation",
+      "Ring buffer stores last 1000 telemetry frames",
+      "Unit tests cover normal + malformed frame scenarios"
+    ]
+  },
+  "completed": [
+    {
+      "id": 0,
+      "task": "Initialize project scaffold",
+      "description": "Set up Next.js 14 project with TypeScript, Tailwind, and Prisma ORM. Configure ESLint and Vitest.",
+      "completed_at": "2026-02-06T09:15:00Z",
+      "commit": "a1b2c3d",
+      "files_changed": ["package.json", "tsconfig.json", "prisma/schema.prisma", "vitest.config.ts"],
+      "test_results": "pass"
+    },
+    {
+      "id": 1,
+      "task": "Design orbital mechanics data model",
+      "description": "Create Prisma models for orbital elements, trajectory waypoints, maneuver nodes, and celestial body ephemeris data.",
+      "completed_at": "2026-02-06T10:42:00Z",
+      "commit": "e4f5g6h",
+      "files_changed": ["prisma/schema.prisma", "lib/types/orbital.ts", "tests/models.test.ts"],
+      "test_results": "pass"
+    },
+    {
+      "id": 2,
+      "task": "Build trajectory computation engine",
+      "description": "Implement Keplerian orbit propagator with J2 perturbation corrections. Lambert solver for transfer orbit computation.",
+      "completed_at": "2026-02-06T12:18:00Z",
+      "retries": 2,
+      "commit": "i7j8k9l",
+      "files_changed": ["lib/astro/kepler.ts", "lib/astro/lambert.ts", "lib/astro/propagator.ts", "tests/astro.test.ts"],
+      "test_results": "pass"
+    },
+    {
+      "id": 3,
+      "task": "Create REST API for mission planning",
+      "description": "Build API routes for CRUD operations on missions, waypoints, and maneuver sequences. Include validation middleware.",
+      "completed_at": "2026-02-06T13:55:00Z",
+      "commit": "m0n1o2p",
+      "files_changed": ["app/api/missions/route.ts", "app/api/waypoints/route.ts", "lib/middleware/validate.ts", "tests/api.test.ts"],
+      "test_results": "pass"
+    }
+  ],
+  "backlog": [
+    {
+      "id": 5,
+      "task": "Build 3D orbit visualizer component",
+      "description": "Create a Three.js-based React component that renders orbital trajectories, celestial bodies, and spacecraft position in real-time.\n\nUse @react-three/fiber for React integration. Render Earth with texture mapping, orbital path as a spline curve, and spacecraft as a simple mesh with orientation gizmo.",
+      "depends_on": [4],
+      "skills": ["react", "threejs", "webgl"],
+      "acceptance": [
+        "3D scene renders Earth with orbital trajectory",
+        "Spacecraft position updates in real-time from telemetry",
+        "Camera controls allow orbit, pan, zoom"
+      ]
+    },
+    {
+      "id": 6,
+      "task": "Implement ground station pass predictor",
+      "description": "Calculate visibility windows between spacecraft and ground stations using SGP4 propagation. Output AOS/LOS times and max elevation for each pass.",
+      "skills": ["typescript", "astrodynamics"],
+      "acceptance": [
+        "Predicts passes for configured ground stations",
+        "Outputs AOS, LOS, max elevation for each pass",
+        "Results match STK reference within 30 seconds"
+      ]
+    },
+    {
+      "id": 7,
+      "task": "Add authentication and role-based access",
+      "description": "Implement JWT-based auth with mission commander, engineer, and observer roles. Protect API routes with middleware. Use Argon2 for password hashing.",
+      "skills": ["nextjs", "auth", "security"],
+      "acceptance": [
+        "Login/logout flow with JWT tokens",
+        "Role-based route protection",
+        "Password hashing with Argon2"
+      ]
+    },
+    {
+      "id": 8,
+      "task": "Build mission timeline dashboard",
+      "description": "Create a Gantt-style timeline showing mission phases, maneuver windows, ground station passes, and eclipse periods. Interactive zoom and pan.",
+      "depends_on": [5, 6],
+      "skills": ["react", "d3", "ui"],
+      "acceptance": [
+        "Timeline renders mission phases as blocks",
+        "Zoom/pan with mouse and touch gestures",
+        "Current time indicator with auto-scroll"
+      ]
+    }
+  ],
+  "discovered": [
+    {
+      "id": 9,
+      "task": "Handle leap seconds in time conversion",
+      "description": "The trajectory engine assumes continuous time but UTC has leap seconds. Need to implement TAI-UTC conversion table for precision timing.",
+      "source": "Task #2 - trajectory computation"
+    },
+    {
+      "id": 10,
+      "task": "Add telemetry data export to CSV",
+      "description": "Users need to export telemetry history for offline analysis. Implement CSV export with configurable column selection and time range.",
+      "source": "Task #4 - telemetry parser"
+    }
+  ],
+  "notes": [
+    "Using J2000 epoch as reference frame for all orbital calculations",
+    "Telemetry format based on CCSDS packet standard (simplified)",
+    "Target: sub-100ms latency for real-time telemetry display"
+  ]
+}

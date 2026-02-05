@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>RALPH // Mission Control</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+        :root {
+            --bg-deep: #05080c;
+            --bg-panel: #0a0f16;
+            --bg-card: #0e1520;
+            --bg-card-hover: #121c2b;
+            --border: #1a2332;
+            --border-light: #1e2a3a;
+            --cyan: #00e5ff;
+            --cyan-dim: #00859480;
+            --cyan-glow: #00e5ff30;
+            --green: #00e676;
+            --green-dim: #00e67640;
+            --amber: #ffab00;
+            --amber-dim: #ffab0040;
+            --red: #ff1744;
+            --red-dim: #ff174430;
+            --purple: #b388ff;
+            --purple-dim: #b388ff30;
+            --text-primary: #e0e6ed;
+            --text-secondary: #6b7f96;
+            --text-dim: #3d4f63;
+            --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+            --sans: 'Inter', -apple-system, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--mono);
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Subtle scan-line overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 229, 255, 0.008) 2px,
+                rgba(0, 229, 255, 0.008) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .shell {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px 32px;
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--cyan);
+            position: relative;
+        }
+
+        .logo::before {
+            content: '◆';
+            margin-right: 8px;
+            font-size: 8px;
+            vertical-align: middle;
+        }
+
+        .project-name {
+            font-family: var(--sans);
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 0.5px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .signal {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        .signal-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green-dim);
+            animation: beacon 2s ease-in-out infinite;
+        }
+
+        .signal-dot.offline {
+            background: var(--red);
+            box-shadow: 0 0 8px var(--red-dim);
+            animation: none;
+        }
+
+        @keyframes beacon {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .timestamp-display {
+            font-size: 11px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        /* ── TELEMETRY STRIP ── */
+        .telemetry-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .gauge {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px 18px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s;
+        }
+
+        .gauge:hover {
+            border-color: var(--border-light);
+        }
+
+        .gauge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: var(--cyan);
+            opacity: 0.4;
+            border-radius: 3px 0 0 3px;
+        }
+
+        .gauge-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        .gauge-value {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .gauge-value .unit {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            margin-left: 4px;
+        }
+
+        /* ── PROGRESS TRACK ── */
+        .progress-track {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 18px 22px;
+            margin-bottom: 24px;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .progress-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-secondary);
+        }
+
+        .progress-pct {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--cyan);
+        }
+
+        .progress-bar-outer {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan), var(--green));
+            border-radius: 2px;
+            transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+        }
+
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -2px;
+            width: 8px;
+            height: 8px;
+            background: var(--cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 12px var(--cyan-glow);
+        }
+
+        .progress-ticks {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding: 0 2px;
+        }
+
+        .tick {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--border);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .tick.done {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green-dim);
+        }
+
+        .tick.active {
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan-glow);
+            animation: beacon 1.5s ease-in-out infinite;
+        }
+
+        .tick.pending {
+            background: var(--border-light);
+        }
+
+        /* ── KANBAN GRID ── */
+        .kanban {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .col {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            max-height: 65vh;
+            overflow: hidden;
+        }
+
+        .col-head {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .col-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .col-count {
+            font-size: 10px;
+            color: var(--text-dim);
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+        }
+
+        .col-body {
+            padding: 12px;
+            overflow-y: auto;
+            flex: 1;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .col-body::-webkit-scrollbar {
+            width: 4px;
+        }
+        .col-body::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        /* Status indicator lines on column headers */
+        .col[data-status="completed"] .col-head {
+            border-top: 2px solid var(--green);
+        }
+        .col[data-status="current"] .col-head {
+            border-top: 2px solid var(--cyan);
+        }
+        .col[data-status="backlog"] .col-head {
+            border-top: 2px solid var(--amber);
+        }
+        .col[data-status="discovered"] .col-head {
+            border-top: 2px solid var(--purple);
+        }
+
+        /* ── TASK CARDS ── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .card:last-child {
+            margin-bottom: 0;
+        }
+
+        .card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-light);
+            transform: translateY(-1px);
+        }
+
+        .card-active {
+            border-color: var(--cyan);
+            box-shadow: inset 0 0 0 1px var(--cyan-dim), 0 0 20px var(--cyan-glow);
+            animation: card-pulse 3s ease-in-out infinite;
+        }
+
+        .card-active:hover {
+            border-color: var(--cyan);
+        }
+
+        @keyframes card-pulse {
+            0%, 100% { box-shadow: inset 0 0 0 1px var(--cyan-dim), 0 0 20px var(--cyan-glow); }
+            50% { box-shadow: inset 0 0 0 1px var(--cyan-dim), 0 0 30px rgba(0, 229, 255, 0.12); }
+        }
+
+        .card-id {
+            font-size: 10px;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .card-title {
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .tag {
+            font-size: 9px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            background: var(--bg-deep);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+            text-transform: lowercase;
+        }
+
+        .tag-pass {
+            border-color: var(--green-dim);
+            color: var(--green);
+        }
+
+        .tag-fail {
+            border-color: var(--red-dim);
+            color: var(--red);
+        }
+
+        .card-commit {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-top: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .card-source {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-top: 6px;
+            font-style: italic;
+        }
+
+        .card-blocked {
+            opacity: 0.45;
+        }
+
+        .card-blocked:hover {
+            opacity: 0.65;
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .badge-retry {
+            font-size: 9px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            background: var(--bg-deep);
+            border: 1px solid var(--amber-dim);
+            color: var(--amber);
+            letter-spacing: 0.5px;
+        }
+
+        .badge-blocked {
+            font-size: 9px;
+            padding: 2px 7px;
+            border-radius: 3px;
+            background: var(--bg-deep);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+        }
+
+        .empty {
+            color: var(--text-dim);
+            text-align: center;
+            padding: 32px 16px;
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+
+        /* ── NOTES STRIP ── */
+        .notes-strip {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px 22px;
+            margin-bottom: 24px;
+        }
+
+        .notes-title {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+        }
+
+        .notes-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .note-item {
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: var(--bg-card);
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .note-item::before {
+            content: '//';
+            color: var(--text-dim);
+            margin-right: 6px;
+        }
+
+        /* ── FOOTER ── */
+        .footer {
+            text-align: center;
+            padding: 16px;
+            color: var(--text-dim);
+            font-size: 10px;
+            letter-spacing: 2px;
+        }
+
+        /* ── MODAL ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 8, 12, 0.92);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            max-width: 680px;
+            width: 100%;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: modal-enter 0.2s ease;
+            box-shadow: 0 0 60px rgba(0, 229, 255, 0.06);
+        }
+
+        @keyframes modal-enter {
+            from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .modal-head {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .modal-head-left {
+            flex: 1;
+        }
+
+        .modal-head-id {
+            font-size: 10px;
+            color: var(--text-dim);
+            letter-spacing: 1.5px;
+            margin-bottom: 6px;
+        }
+
+        .modal-head-title {
+            font-family: var(--sans);
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .modal-close {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 1px;
+            transition: all 0.15s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-light);
+            color: var(--text-primary);
+        }
+
+        .modal-content {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-section {
+            margin-bottom: 24px;
+        }
+
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .modal-section-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .modal-desc {
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+        }
+
+        .modal-criteria {
+            list-style: none;
+        }
+
+        .modal-criteria li {
+            padding: 8px 0 8px 20px;
+            position: relative;
+            font-size: 12px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            line-height: 1.6;
+        }
+
+        .modal-criteria li:last-child {
+            border-bottom: none;
+        }
+
+        .modal-criteria li::before {
+            content: '○';
+            position: absolute;
+            left: 0;
+            color: var(--cyan);
+            font-size: 10px;
+            top: 9px;
+        }
+
+        .modal-criteria li.passed::before {
+            content: '●';
+            color: var(--green);
+        }
+
+        .modal-skills-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        /* ── LOADING ── */
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-dim);
+            font-size: 11px;
+            letter-spacing: 2px;
+        }
+
+        .loading::after {
+            content: '';
+            display: block;
+            width: 24px;
+            height: 2px;
+            background: var(--cyan);
+            margin: 16px auto 0;
+            animation: load-bar 1.2s ease-in-out infinite;
+        }
+
+        @keyframes load-bar {
+            0%, 100% { width: 24px; opacity: 0.4; }
+            50% { width: 48px; opacity: 1; }
+        }
+
+        /* Desktop: restore classic column order via CSS order */
+        @media (min-width: 641px) {
+            .col { order: var(--desktop-order, 0); }
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 1024px) {
+            .kanban {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .col { max-height: none; }
+        }
+
+        @media (max-width: 640px) {
+            .shell {
+                padding: 14px;
+                padding-top: env(safe-area-inset-top, 14px);
+                padding-bottom: env(safe-area-inset-bottom, 14px);
+                padding-left: max(14px, env(safe-area-inset-left));
+                padding-right: max(14px, env(safe-area-inset-right));
+            }
+
+            /* Kill scan-lines on mobile for perf */
+            body::after { display: none; }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+                padding-bottom: 14px;
+                margin-bottom: 16px;
+            }
+            .header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .project-name { font-size: 17px; }
+            .logo { font-size: 10px; letter-spacing: 3px; }
+
+            /* Telemetry: 2-col, bigger text, relaxed spacing */
+            .telemetry-strip {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+            .gauge {
+                padding: 12px 14px;
+            }
+            .gauge-label {
+                font-size: 9px;
+                letter-spacing: 1.5px;
+            }
+            .gauge-value {
+                font-size: 18px;
+            }
+
+            /* Progress: bigger ticks */
+            .progress-track {
+                padding: 14px 16px;
+                margin-bottom: 16px;
+            }
+            .tick {
+                width: 8px;
+                height: 8px;
+            }
+            .progress-ticks {
+                margin-top: 12px;
+                gap: 4px;
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
+
+            /* Kanban: single column */
+            .kanban {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+
+            /* Cards: bigger touch targets */
+            .card {
+                padding: 16px;
+                min-height: 44px;
+            }
+            .card-id {
+                font-size: 11px;
+            }
+            .card-title {
+                font-size: 14px;
+            }
+            .tag {
+                font-size: 10px;
+                padding: 3px 8px;
+            }
+
+            /* Column headers */
+            .col-head {
+                padding: 12px 16px;
+            }
+            .col-title {
+                font-size: 11px;
+                letter-spacing: 2px;
+            }
+
+            /* Notes */
+            .notes-strip {
+                padding: 14px 16px;
+                margin-bottom: 16px;
+            }
+            .note-item {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+
+            /* Modal: full-screen on mobile */
+            .modal-overlay {
+                padding: 0;
+                align-items: flex-end;
+            }
+            .modal {
+                max-height: 92vh;
+                border-radius: 12px 12px 0 0;
+                max-width: 100%;
+                padding-bottom: env(safe-area-inset-bottom, 0px);
+            }
+            .modal-head {
+                padding: 16px 18px;
+            }
+            .modal-head-title {
+                font-size: 15px;
+            }
+            .modal-content {
+                padding: 18px;
+            }
+            .modal-desc {
+                font-size: 13px;
+                line-height: 1.7;
+            }
+            .modal-criteria li {
+                font-size: 13px;
+                padding: 10px 0 10px 20px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+            .modal-close {
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+
+            .footer {
+                font-size: 9px;
+                padding: 12px;
+            }
+        }
+
+        /* Extra small (iPhone SE etc) */
+        @media (max-width: 375px) {
+            .telemetry-strip {
+                grid-template-columns: 1fr;
+            }
+            .gauge-value { font-size: 16px; }
+            .project-name { font-size: 15px; }
+            .signal { font-size: 10px; }
+            .timestamp-display { font-size: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">RALPH</div>
+                <div class="project-name" id="project-name">---</div>
+            </div>
+            <div class="header-right">
+                <div class="signal">
+                    <span class="signal-dot" id="signal-dot"></span>
+                    <span id="status-text">CONNECTING</span>
+                </div>
+                <div class="timestamp-display" id="timestamp">--:--:--</div>
+            </div>
+        </header>
+
+        <div class="telemetry-strip" id="telemetry-strip">
+            <div class="loading">ACQUIRING TELEMETRY</div>
+        </div>
+
+        <div id="progress-section"></div>
+
+        <div class="kanban" id="kanban-board">
+            <div class="loading">INITIALIZING</div>
+        </div>
+
+        <div id="notes-section"></div>
+
+        <div class="footer" id="footer">
+            RALPH MISSION CONTROL v2.0
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="task-modal" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <div class="modal-head-left">
+                    <div class="modal-head-id" id="modal-id">TASK-000</div>
+                    <div class="modal-head-title" id="modal-title">---</div>
+                </div>
+                <button class="modal-close" onclick="closeModal()">ESC</button>
+            </div>
+            <div class="modal-content">
+                <div class="modal-section">
+                    <div class="modal-section-label">Description</div>
+                    <div class="modal-desc" id="modal-description">---</div>
+                </div>
+                <div class="modal-section" id="modal-acceptance-section" style="display:none">
+                    <div class="modal-section-label">Acceptance Criteria</div>
+                    <ul class="modal-criteria" id="modal-acceptance"></ul>
+                </div>
+                <div class="modal-section" id="modal-skills-section" style="display:none">
+                    <div class="modal-section-label">Required Skills</div>
+                    <div class="modal-skills-row" id="modal-skills"></div>
+                </div>
+                <div class="modal-section" id="modal-meta-section" style="display:none">
+                    <div class="modal-section-label">Task Meta</div>
+                    <div class="modal-skills-row" id="modal-meta"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let lastData = null;
+        let scrollPositions = {};
+
+        function saveScrollPositions() {
+            document.querySelectorAll('.col-body').forEach((el, i) => {
+                scrollPositions[i] = el.scrollTop;
+            });
+        }
+
+        function restoreScrollPositions() {
+            document.querySelectorAll('.col-body').forEach((el, i) => {
+                if (scrollPositions[i] !== undefined) el.scrollTop = scrollPositions[i];
+            });
+        }
+
+        function esc(text) {
+            if (!text) return '';
+            const d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        function openModal(task) {
+            document.getElementById('modal-id').textContent = `TASK-${String(task.id).padStart(3, '0')}`;
+            document.getElementById('modal-title').textContent = task.task || '---';
+            document.getElementById('modal-description').textContent = task.description || 'No data available.';
+
+            const skillsEl = document.getElementById('modal-skills');
+            const skillsSec = document.getElementById('modal-skills-section');
+            if (task.skills && task.skills.length) {
+                skillsEl.innerHTML = task.skills.map(s => `<span class="tag">${esc(s)}</span>`).join('');
+                skillsSec.style.display = 'block';
+            } else {
+                skillsSec.style.display = 'none';
+            }
+
+            const accEl = document.getElementById('modal-acceptance');
+            const accSec = document.getElementById('modal-acceptance-section');
+            if (task.acceptance && task.acceptance.length) {
+                accEl.innerHTML = task.acceptance.map(a => `<li>${esc(a)}</li>`).join('');
+                accSec.style.display = 'block';
+            } else {
+                accSec.style.display = 'none';
+            }
+
+            const metaEl = document.getElementById('modal-meta');
+            const metaSec = document.getElementById('modal-meta-section');
+            const metaTags = [];
+            if (task.retries > 0) metaTags.push(`<span class="badge-retry">retry ${task.retries}</span>`);
+            if (task.depends_on && task.depends_on.length) {
+                const doneIds = lastData ? new Set((lastData.completed || []).map(t => t.id)) : new Set();
+                const blocked = task.depends_on.some(id => !doneIds.has(id));
+                metaTags.push(`<span class="badge-blocked">${blocked ? 'blocked by' : 'depends on'} ${task.depends_on.map(id => '#' + id).join(', ')}</span>`);
+            }
+            if (metaTags.length) {
+                metaEl.innerHTML = metaTags.join('');
+                metaSec.style.display = 'block';
+            } else {
+                metaSec.style.display = 'none';
+            }
+
+            document.getElementById('task-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(event) {
+            if (!event || event.target === document.getElementById('task-modal')) {
+                document.getElementById('task-modal').classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+        function updateTimestamp() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('timestamp').textContent = `${h}:${m}:${s} UTC`;
+        }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                const dataStr = JSON.stringify(data);
+                const lastStr = JSON.stringify(lastData);
+
+                if (dataStr !== lastStr) {
+                    saveScrollPositions();
+                    lastData = data;
+                    render(data);
+                    restoreScrollPositions();
+                }
+
+                document.getElementById('signal-dot').classList.remove('offline');
+                updateTimestamp();
+            } catch (err) {
+                document.getElementById('signal-dot').classList.add('offline');
+                document.getElementById('status-text').textContent = 'SIGNAL LOST';
+            }
+        }
+
+        function render(data) {
+            if (!data || data.error) {
+                document.getElementById('kanban-board').innerHTML = `<div class="loading">${data?.error || 'NO DATA'}</div>`;
+                return;
+            }
+            renderHeader(data);
+            renderTelemetry(data);
+            renderProgress(data);
+            renderKanban(data);
+            renderNotes(data);
+        }
+
+        function renderHeader(data) {
+            document.getElementById('project-name').textContent = data.project || '---';
+            const statusMap = {
+                initialized: 'STANDBY',
+                running: 'ACTIVE',
+                paused: 'HOLD',
+                completed: 'COMPLETE'
+            };
+            document.getElementById('status-text').textContent = statusMap[data.status] || data.status?.toUpperCase() || '---';
+        }
+
+        function renderTelemetry(data) {
+            const total = (data.completed?.length || 0) + (data.backlog?.length || 0) + (data.discovered?.length || 0) + (data.current ? 1 : 0);
+            const completed = data.completed?.length || 0;
+            const backlog = data.backlog?.length || 0;
+            const discovered = data.discovered?.length || 0;
+
+            document.getElementById('telemetry-strip').innerHTML = `
+                <div class="gauge">
+                    <div class="gauge-label">Status</div>
+                    <div class="gauge-value">${data.status?.toUpperCase() || '---'}</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Iterations</div>
+                    <div class="gauge-value">${data.iterations?.actual || 0}<span class="unit">/ ${data.iterations?.planned || 0}</span></div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Tasks Done</div>
+                    <div class="gauge-value">${completed}<span class="unit">/ ${total}</span></div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Backlog</div>
+                    <div class="gauge-value">${backlog}</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Discovered</div>
+                    <div class="gauge-value">${discovered}</div>
+                </div>
+                <div class="gauge">
+                    <div class="gauge-label">Branch</div>
+                    <div class="gauge-value" style="font-size:12px; word-break:break-all;">${esc(data.branch || '---')}</div>
+                </div>
+            `;
+        }
+
+        function renderProgress(data) {
+            const allTasks = [];
+            (data.completed || []).forEach(t => allTasks.push({ ...t, _state: 'done' }));
+            if (data.current && Object.keys(data.current).length) allTasks.push({ ...data.current, _state: 'active' });
+            (data.backlog || []).forEach(t => allTasks.push({ ...t, _state: 'pending' }));
+            (data.discovered || []).forEach(t => allTasks.push({ ...t, _state: 'pending' }));
+
+            const total = allTasks.length;
+            const done = data.completed?.length || 0;
+            const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+            const ticks = allTasks.sort((a, b) => a.id - b.id).map(t =>
+                `<div class="tick ${t._state}"></div>`
+            ).join('');
+
+            document.getElementById('progress-section').innerHTML = `
+                <div class="progress-track">
+                    <div class="progress-meta">
+                        <span class="progress-label">Mission Progress</span>
+                        <span class="progress-pct">${pct}%</span>
+                    </div>
+                    <div class="progress-bar-outer">
+                        <div class="progress-bar-fill" style="width: ${pct}%"></div>
+                    </div>
+                    <div class="progress-ticks">${ticks}</div>
+                </div>
+            `;
+        }
+
+        function renderKanban(data) {
+            // Render order = mobile priority: current first, completed last.
+            // Desktop reorders via CSS `order` to: completed | current | backlog | discovered
+            const cols = [
+                { key: 'current',    title: 'In Progress', status: 'current',    isCurrent: true, desktopOrder: 2 },
+                { key: 'discovered', title: 'Discovered',  status: 'discovered', desktopOrder: 4 },
+                { key: 'backlog',    title: 'Backlog',     status: 'backlog',    desktopOrder: 3 },
+                { key: 'completed',  title: 'Completed',   status: 'completed',  reverse: true, desktopOrder: 1 }
+            ];
+
+            document.getElementById('kanban-board').innerHTML = cols.map(col => {
+                if (col.isCurrent) return renderCurrentCol(data, col);
+                return renderCol(data, col);
+            }).join('');
+        }
+
+        function renderCurrentCol(data, col) {
+            const has = data.current && Object.keys(data.current).length > 0;
+            const retries = data.current?.retries || 0;
+            const body = has ? `
+                <div class="card card-active" onclick='openModal(${JSON.stringify(data.current).replace(/'/g, "&#39;")})'>
+                    <div class="card-id">TASK-${String(data.current.id).padStart(3, '0')}</div>
+                    <div class="card-title">${esc(data.current.task)}</div>
+                    ${data.current.skills?.length ? `<div class="card-tags">${data.current.skills.map(s => `<span class="tag">${esc(s)}</span>`).join('')}</div>` : ''}
+                    ${retries > 0 ? `<div class="card-meta"><span class="badge-retry">retry ${retries}</span></div>` : ''}
+                </div>
+            ` : '<div class="empty">NO ACTIVE TASK</div>';
+
+            return `
+                <div class="col" data-status="${col.status}" style="--desktop-order:${col.desktopOrder}">
+                    <div class="col-head">
+                        <span class="col-title">${col.title}</span>
+                        <span class="col-count">${has ? 1 : 0}</span>
+                    </div>
+                    <div class="col-body">${body}</div>
+                </div>
+            `;
+        }
+
+        function isBlocked(task, data) {
+            if (!task.depends_on || !task.depends_on.length) return false;
+            const doneIds = new Set((data.completed || []).map(t => t.id));
+            return task.depends_on.some(id => !doneIds.has(id));
+        }
+
+        function renderCol(data, col) {
+            const tasks = data[col.key] || [];
+            const display = col.reverse ? [...tasks].reverse() : tasks;
+
+            const body = tasks.length ? display.map(t => {
+                const blocked = col.key === 'backlog' && isBlocked(t, data);
+                const retries = t.retries || 0;
+                return `
+                <div class="card ${blocked ? 'card-blocked' : ''}" onclick='openModal(${JSON.stringify(t).replace(/'/g, "&#39;")})'>
+                    <div class="card-id">TASK-${String(t.id).padStart(3, '0')}</div>
+                    <div class="card-title">${esc(t.task)}</div>
+                    ${t.skills?.length ? `<div class="card-tags">${t.skills.map(s => `<span class="tag">${esc(s)}</span>`).join('')}</div>` : ''}
+                    ${t.test_results ? `<div class="card-tags"><span class="tag ${t.test_results === 'pass' ? 'tag-pass' : 'tag-fail'}">${t.test_results === 'pass' ? '●' : '○'} tests ${t.test_results}</span></div>` : ''}
+                    ${retries > 0 || blocked || t.commit || t.source ? `<div class="card-meta">
+                        ${retries > 0 ? `<span class="badge-retry">retry ${retries}</span>` : ''}
+                        ${blocked ? `<span class="badge-blocked">blocked by ${t.depends_on.join(', ')}</span>` : ''}
+                    </div>` : ''}
+                    ${t.commit ? `<div class="card-commit">${esc(t.commit)}</div>` : ''}
+                    ${t.source ? `<div class="card-source">from ${esc(t.source)}</div>` : ''}
+                </div>
+                `;
+            }).join('') : '<div class="empty">EMPTY</div>';
+
+            return `
+                <div class="col" data-status="${col.status}" style="--desktop-order:${col.desktopOrder}">
+                    <div class="col-head">
+                        <span class="col-title">${col.title}</span>
+                        <span class="col-count">${tasks.length}</span>
+                    </div>
+                    <div class="col-body">${body}</div>
+                </div>
+            `;
+        }
+
+        function renderNotes(data) {
+            if (!data.notes || !data.notes.length) {
+                document.getElementById('notes-section').innerHTML = '';
+                return;
+            }
+            document.getElementById('notes-section').innerHTML = `
+                <div class="notes-strip">
+                    <div class="notes-title">Mission Notes</div>
+                    <div class="notes-list">
+                        ${data.notes.map(n => `<div class="note-item">${esc(n)}</div>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Boot
+        fetchStatus();
+        setInterval(fetchStatus, 2000);
+    </script>
+</body>
+</html>

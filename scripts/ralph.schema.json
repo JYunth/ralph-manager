@@ -1,0 +1,184 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ralph Kanban Schema",
+  "type": "object",
+  "required": ["project", "repo", "status", "iterations", "current", "completed", "backlog"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "repo": {
+      "type": "string",
+      "description": "Absolute path to repository"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["initialized", "running", "paused", "completed"],
+      "description": "Overall project status"
+    },
+    "iterations": {
+      "type": "object",
+      "required": ["planned", "actual"],
+      "properties": {
+        "planned": {
+          "type": "number",
+          "description": "Initial planned iterations"
+        },
+        "actual": {
+          "type": "number",
+          "description": "Iterations actually run"
+        }
+      }
+    },
+    "current": {
+      "type": ["object", "null"],
+      "description": "Currently running task (null if idle)",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "task": {
+          "type": "string",
+          "description": "Short task title (1 line)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed context for Ralph - what to build, how, technical details"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "done"]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "retries": {
+          "type": "number",
+          "default": 0,
+          "description": "Number of times this task was retried. Supervisor increments on re-fire."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "completed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "task": {
+            "type": "string",
+            "description": "Short task title"
+          },
+          "description": {
+            "type": "string",
+            "description": "What was built (for reference)"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retries": {
+            "type": "number",
+            "default": 0,
+            "description": "How many retries it took before passing"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "files_changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "test_results": {
+            "type": "string",
+            "enum": ["pass", "fail"]
+          }
+        }
+      }
+    },
+    "backlog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "task", "description"],
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "task": {
+            "type": "string",
+            "description": "Short task title (1 line)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed context for Ralph - what to build, how, technical details, architecture decisions"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "IDs of tasks that must complete before this one can start. Set at planning time."
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "discovered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "task": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "Which task discovered this"
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
